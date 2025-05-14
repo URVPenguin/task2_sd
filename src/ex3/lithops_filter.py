@@ -1,41 +1,39 @@
+import re
 from lithops import FunctionExecutor
 from lithops.storage import Storage
+from insult_filter import InsultFilter
 
-insults = ['idiota', 'tonto', 'imbécil', 'estúpido', 'inútil', 'burro']
-bucket = 'lithops-filter'
+BUCKET = 'lithops-filter'
 
-def map_function(text_key, storage):
-    censored_insults = 0
-    obj = storage.get_object(bucket=bucket, key=text_key)
+def map_func(text_key, storage):
+    obj = storage.get_object(bucket=BUCKET, key=text_key)
     text = obj.decode('utf-8')
+    insult_filter = InsultFilter()
 
-    censored_lines = []
-    for line in text.splitlines():
-        for insult in insults:
-            if insult in line:
-                censored_insults += line.count(insult)
-                line = line.replace(insult, "CENSORED")
-        censored_lines.append(line)
+    censored_insults = 0
+    for insult in sorted(insult_filter.insults, key=len, reverse=True):
+        matches = re.findall(rf'\b{re.escape(insult)}\b', text, flags=re.IGNORECASE)
+        censored_insults += len(matches)
+        text = re.sub(rf'\b{re.escape(insult)}\b', "CENSORED", text, flags=re.IGNORECASE)
 
-    censored_text = "\n".join(censored_lines)
     censored_key = text_key.replace('.txt', '_censored.txt')
-    storage.put_object(bucket=bucket, key=censored_key, body=censored_text.encode('utf-8'))
+    storage.put_object(bucket=BUCKET, key=censored_key, body=text.encode('utf-8'))
 
     return censored_insults
 
-def reduce_function(results):
+def reduce_func(results):
     return sum(results)
 
 if __name__ == '__main__':
     storage = Storage()
 
-    files = [key for key in storage.list_keys(bucket) if key.endswith('.txt')]
+    files = [key for key in storage.list_keys(BUCKET) if key.endswith('.txt') and 'censored' not in key]
 
-    print(f"📝 Archivos encontrados: {len(files)}")
+    print(f"📝 Founded files : {len(files)}")
     if not files:
-        print("⚠️ No hay archivos .txt en el bucket.")
+        print("⚠️ ERROR: No .txt files in the bucket.")
     else:
         with FunctionExecutor() as fexec:
-            fexec.map_reduce(map_function, files, reduce_function)
-            total = fexec.get_result()
-            print(f"✅ Total de insultos censurados: {total}")
+            fexec.map_reduce(map_func, files, reduce_func)
+            total = fexec.get_result(show_progressbar=True)
+            print(f"✅ Total censored insults: {total}")
