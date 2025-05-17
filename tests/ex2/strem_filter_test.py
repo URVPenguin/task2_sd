@@ -12,9 +12,8 @@ def submit_text(_):
     )
 
 if __name__ == "__main__":
-
-    for _ in range(3):
+    requests = [30, 10, 20, 30, 60, 70, 80, 200, 300, 400, 500, 10, 5, 5, 5, 5]
+    for req in requests:
         with multiprocessing.Pool(processes=10) as pool:
-            pool.map(submit_text, range(30))
-
-        sleep(3)
+            pool.map(submit_text, range(req))
+        sleep(5)
