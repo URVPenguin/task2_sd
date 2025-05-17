@@ -1,19 +1,24 @@
 import boto3
 import json
 
-BUCKET_NAME = "insult-results-bucket"
+DYNAMODB_TABLE_NAME = "InsultResultsTable"
+
 
 def lambda_handler(event, context):
-    s3 = boto3.client('s3', region_name='us-east-1')
+    dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
     try:
-        response = s3.list_objects_v2(Bucket=BUCKET_NAME)
+        response = table.scan(
+            Limit=100,
+            Select='ALL_ATTRIBUTES'
+        )
 
-        results = []
-        for obj in response.get('Contents', []):
-            content = s3.get_object(Bucket=BUCKET_NAME, Key=obj['Key'])
-            file_content = content['Body'].read().decode('utf-8')
-            results.extend(file_content.split("\n"))
+        items = sorted(response['Items'], key=lambda x: x['timestamp'], reverse=True)
+
+        last_100_items = items[:100]
+
+        results = [item['filtered_text'] for item in last_100_items]
 
         return {
             "StatusCode": 200,

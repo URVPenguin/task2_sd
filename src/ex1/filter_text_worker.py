@@ -4,34 +4,44 @@ import time
 import uuid
 from insult_filter import InsultFilter
 
-BUCKET_NAME = "insult-results-bucket"
+DYNAMODB_TABLE_NAME = "InsultResultsTable"
+
 
 def lambda_handler(event, context):
     insult_filter = InsultFilter()
-    s3 = boto3.client('s3', region_name='us-east-1')
+    try:
+        dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+        table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
-    results = []
-    for record in event['Records']:
-        body = json.loads(record['body'])
-        text = body.get("text", "")
-        filtered = insult_filter.filter_text(text)
-        results.append(filtered)
+        for record in event['Records']:
+            body = json.loads(record['body'])
+            text = body.get("text", "")
+            filtered = insult_filter.filter_text(text)
 
-    file_id = str(uuid.uuid4())
-    timestamp = int(time.time())
-    key = f"filtered_insults_{timestamp}_{file_id}.txt"
+            item_id = str(uuid.uuid4())
+            timestamp = int(time.time())
 
-    s3.put_object(
-        Bucket=BUCKET_NAME,
-        Key=key,
-        Body="\n".join(results),
-        ContentType='text/plain'
-    )
+            table.put_item(
+                Item={
+                    'id': item_id,
+                    'timestamp': timestamp,
+                    'original_text': text,
+                    'filtered_text': filtered,
+                }
+            )
 
-    return {
-        "StatusCode": 200,
-        "body": json.dumps({
-            "message": f"Saved {len(results)} results to {key}",
-            "s3_key": key
-        })
-    }
+        return {
+            "StatusCode": 200,
+            "body": json.dumps({
+                "message": f"Processed {len(event['Records'])} records and saved to DynamoDB",
+                "table_name": DYNAMODB_TABLE_NAME
+            })
+        }
+    except Exception as e:
+        return {
+            "StatusCode": 500,
+            "body": json.dumps({
+                "error": str(e)
+            })
+        }
+
