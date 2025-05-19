@@ -53,7 +53,7 @@ def invoke_lambda(lambda_client, function_name, messages, sqs_queue):
         if response.get("StatusCode") == 200:
             for msg in messages:
                 sqs_queue.delete_message(msg['ReceiptHandle'])
-                print(f"[SUCCESS] Deleted message: {msg['MessageId']}")
+                #print(f"[SUCCESS] Deleted message: {msg['MessageId']}")
         else:
             print(f"[FAIL] Lambda failed {response_payload}")
     except Exception as e:
@@ -62,9 +62,7 @@ def invoke_lambda(lambda_client, function_name, messages, sqs_queue):
 def stream(function_name, maxfunc, queue_name):
     sqs_queue = SQSQueue(queue_name)
     lambda_client = boto3.client('lambda', region_name="us-east-1")
-    efficiency_factor = 0.6
     lambda_batch_size = 10
-    estimated_batch = max(1, int(lambda_batch_size * efficiency_factor))
 
     with ThreadPoolExecutor(max_workers=maxfunc) as executor:
         futures = set()
@@ -74,21 +72,25 @@ def stream(function_name, maxfunc, queue_name):
             futures -= done
 
             queue_size, messages_processing = sqs_queue.get_queue_statistics()
-            required_invocations = math.ceil(queue_size // estimated_batch)
+            required_invocations = math.ceil(queue_size // lambda_batch_size)
+            if required_invocations == 0:
+                required_invocations = queue_size % lambda_batch_size
             available_slots = maxfunc - len(futures)
+
+            print(queue_size, messages_processing, required_invocations, available_slots)
 
             if queue_size <= 0 or available_slots <= 0 or min(available_slots, required_invocations) == 0:
                 time.sleep(0.2)
                 continue
 
-            for invoke in range(required_invocations):
+            for invoke in range(min(available_slots, required_invocations)):
                 messages = sqs_queue.get_messages()
                 if not messages:
                     continue
                 future = executor.submit(invoke_lambda, lambda_client, function_name, messages, sqs_queue)
                 futures.add(future)
 
-            time.sleep(0.2)
+            time.sleep(0.1)
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:

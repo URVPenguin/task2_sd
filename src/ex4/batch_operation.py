@@ -35,17 +35,12 @@ def run_batch(map_function, maxfunc, bucket):
     n_batches = math.ceil(len(file_list) / maxfunc)
     print(f"Processing {len(file_list)} files in {n_batches} batches of maxfunc = {maxfunc}")
 
-    results = []
-    for i in range(0, len(file_list), maxfunc):
-        batch = file_list[i:i + maxfunc]
-        with FunctionExecutor() as fexec:
-            fexec.map(map_function, batch)
-            results += fexec.get_result()
-        print(f"✅ Results: {results}")
+    with FunctionExecutor(max_workers=maxfunc) as fexec:
+        fexec.map(map_function, file_list)
+        results = fexec.get_result()
 
-    print(f"✅ Final Results: {results}")
     return results
 
 
 if __name__ == '__main__':
-    print(run_batch(map_func, 2, 'lithops-filter'))
+    print(run_batch(map_func, 1, 'lithops-filter'))
