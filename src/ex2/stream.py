@@ -77,8 +77,6 @@ def stream(function_name, maxfunc, queue_name):
                 required_invocations = queue_size % lambda_batch_size
             available_slots = maxfunc - len(futures)
 
-            print(queue_size, messages_processing, required_invocations, available_slots)
-
             if queue_size <= 0 or available_slots <= 0 or min(available_slots, required_invocations) == 0:
                 time.sleep(0.2)
                 continue
